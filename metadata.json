@@ -1,0 +1,5 @@
+{
+  "name": "Controle Financeiro Familiar V2",
+  "description": "Um aplicativo simples de registro de receitas e despesas para ajudar a controlar suas finanças pessoais. Utiliza autenticação e banco de dados Supabase para salvar as informações de forma segura.",
+  "requestFramePermissions": []
+}
