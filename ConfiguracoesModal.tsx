@@ -6,6 +6,7 @@ import type { Membro, Categoria, Conta, Grupo } from './types';
 import ConfirmationModal from './ConfirmationModal';
 import ContasTab from './ContasTab';
 import GruposTab from './GruposTab';
+import PeriodosTab from './PeriodosTab';
 
 interface ConfiguracoesModalProps {
   isOpen: boolean;
@@ -344,15 +345,13 @@ export default function ConfiguracoesModal({
   const handleGrupoDeleteRequest = (grupo: Grupo, message: string, onConfirm: () => Promise<void>) => {
     setGrupoToDelete(grupo);
     setGrupoDeleteMessage(message);
-    // Armazenamos a função de callback no estado. 
-    // Usamos uma função anônima que retorna a função desejada para evitar que o useState a execute imediatamente.
     setGrupoDeleteAction(() => onConfirm);
     setIsConfirmDeleteGrupoOpen(true);
   };
 
   const handleGrupoDeleteConfirm = async () => {
     if (grupoDeleteAction) {
-      setLoading(true); // Controla o loading do botão do modal
+      setLoading(true); 
       try {
         await grupoDeleteAction();
         setIsConfirmDeleteGrupoOpen(false);
@@ -361,7 +360,6 @@ export default function ConfiguracoesModal({
         setGrupoDeleteAction(null);
       } catch (e) {
         console.error("Erro ao executar exclusão do grupo via modal:", e);
-        // O erro já deve ter sido tratado/alertado dentro do callback, mas garantimos aqui que o loading para
       } finally {
         setLoading(false);
       }
@@ -498,6 +496,10 @@ export default function ConfiguracoesModal({
     />
   );
   
+  const renderPeriodosTab = () => (
+    <PeriodosTab />
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -520,6 +522,12 @@ export default function ConfiguracoesModal({
         <h2 className="text-xl font-bold mb-6 text-white text-center">Configurações</h2>
         
         <div className="flex border-b border-gray-600 mb-6 overflow-x-auto">
+            <button
+                className={`flex-1 py-2 px-2 text-center font-medium transition-colors whitespace-nowrap ${activeTab === 'periodos' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-gray-400 hover:text-white'}`}
+                onClick={() => setActiveTab('periodos')}
+            >
+                Períodos
+            </button>
             <button
                 className={`flex-1 py-2 px-2 text-center font-medium transition-colors whitespace-nowrap ${activeTab === 'membros' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-gray-400 hover:text-white'}`}
                 onClick={() => setActiveTab('membros')}
@@ -546,6 +554,7 @@ export default function ConfiguracoesModal({
             </button>
         </div>
 
+        {activeTab === 'periodos' && renderPeriodosTab()}
         {activeTab === 'membros' && renderMembrosTab()}
         {activeTab === 'grupos' && renderGruposTab()}
         {activeTab === 'categorias' && renderCategoriasTab()}

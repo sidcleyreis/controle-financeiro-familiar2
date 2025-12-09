@@ -43,8 +43,8 @@ export interface PeriodoFinanceiro {
     id: number;
     usuario_id: string;
     nome: string;
-    data_inicio: string;
-    data_fim: string;
+    data_inicio: string; // YYYY-MM-DD
+    data_fim: string; // YYYY-MM-DD
     ativo: boolean;
     criado_em: string;
 }
