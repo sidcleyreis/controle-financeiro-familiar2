@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import type { Session } from '@supabase/supabase-js';
@@ -7,7 +6,8 @@ import DashboardView from './DashboardView';
 import TransacoesView from './TransacoesView';
 import AddTransactionModal from './AddTransactionModal';
 import ConfirmationModal from './ConfirmationModal';
-import ConfiguracoesModal from './ConfiguracoesModal'; 
+import ConfiguracoesModal from './ConfiguracoesModal';
+import PeriodoSelector from './PeriodoSelector';
 import type { Transacao, Membro, Grupo, Conta, Categoria, PeriodoFinanceiro } from './types';
 
 // --- DADOS DE DEMONSTRAÇÃO (CONSTANTES GLOBAIS) ---
@@ -75,21 +75,20 @@ export default function MainLayout({ session }: { session?: Session }) {
     return [];
   });
 
+  // Novos estados para Períodos
   const [periodos, setPeriodos] = useState<PeriodoFinanceiro[]>(() => {
     if (!session?.user?.id) return PERIODOS_DEMO;
     return [];
   });
 
-  const [activePeriodo, setActivePeriodo] = useState<PeriodoFinanceiro | null>(() => {
+  const [periodoSelecionado, setPeriodoSelecionado] = useState<PeriodoFinanceiro | null>(() => {
     if (!session?.user?.id) return PERIODOS_DEMO[0];
     return null;
   });
 
-  // Log de depuração
-  console.log('MainLayout activePeriodo (após useState):', activePeriodo);
+  const [loadingPeriodos, setLoadingPeriodos] = useState(() => !!session?.user?.id);
 
   // Estados de UI
-  // Se não tem sessão, loading começa falso pois os dados demo já estão carregados
   const [loading, setLoading] = useState(() => !!session?.user?.id); 
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transacoes'>('dashboard');
@@ -110,12 +109,70 @@ export default function MainLayout({ session }: { session?: Session }) {
     setCurrentDate(formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1));
   }, []);
 
-  // Efeito para buscar dados do Supabase (Apenas se logado)
-  useEffect(() => {
-    if (!session?.user?.id) {
-        // Modo demo já inicializado no useState, não faz nada aqui
-        return;
+  // Busca Períodos Financeiros
+  const fetchPeriodos = async () => {
+    if (!session) {
+      setPeriodos(PERIODOS_DEMO);
+      setPeriodoSelecionado(PERIODOS_DEMO[0]);
+      setLoadingPeriodos(false);
+      return;
     }
+
+    setLoadingPeriodos(true);
+    try {
+      const { data, error } = await supabase
+        .from('periodos_financeiros')
+        .select('*')
+        .eq('usuario_id', session.user.id)
+        .order('data_inicio', { ascending: false });
+
+      if (error) throw error;
+
+      setPeriodos(data || []);
+
+      // Selecionar período ativo por padrão
+      if (data && data.length > 0) {
+        // Tenta manter o selecionado se ainda existir
+        if (periodoSelecionado) {
+             const aindaExiste = data.find((p: PeriodoFinanceiro) => p.id === periodoSelecionado.id);
+             if (aindaExiste) {
+                 setPeriodoSelecionado(aindaExiste);
+                 setLoadingPeriodos(false);
+                 return;
+             }
+        }
+
+        const periodoAtivo = data.find((p: PeriodoFinanceiro) => p.ativo);
+        if (periodoAtivo) {
+          setPeriodoSelecionado(periodoAtivo);
+        } else {
+          // Se não houver período ativo, seleciona o mais recente
+          setPeriodoSelecionado(data[0]);
+        }
+      } else {
+          setPeriodoSelecionado(null);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar períodos:', error);
+      setPeriodos([]);
+      setPeriodoSelecionado(null);
+    } finally {
+      setLoadingPeriodos(false);
+    }
+  };
+
+  // Carregar períodos quando houver sessão ou quando a modal de configurações fechar (pode ter alterado períodos)
+  useEffect(() => {
+    if (session) {
+      fetchPeriodos();
+    } else {
+      setLoadingPeriodos(false);
+    }
+  }, [session, isSettingsModalOpen]); // Recarrega ao fechar modal de config
+
+  // Efeito para buscar dados Iniciais (Exceto Períodos que agora tem fetch próprio)
+  useEffect(() => {
+    if (!session?.user?.id) return;
 
     const fetchInitialData = async () => {
       setLoading(true);
@@ -127,14 +184,12 @@ export default function MainLayout({ session }: { session?: Session }) {
           gruposRes,
           contasRes,
           categoriasRes,
-          periodosRes,
         ] = await Promise.all([
           supabase.from('transacoes').select('*, categorias(nome), contas:conta_id(nome)').eq('usuario_id', session.user.id).order('data_transacao', { ascending: false }),
           supabase.from('membros').select('*').eq('usuario_id', session.user.id).order('nome'),
           supabase.from('grupos').select('*').eq('usuario_id', session.user.id).eq('ativo', true),
           supabase.from('contas').select('*').eq('usuario_id', session.user.id).eq('ativo', true),
           supabase.from('categorias').select('*').eq('usuario_id', session.user.id),
-          supabase.from('periodos_financeiros').select('*').eq('usuario_id', session.user.id),
         ]);
 
         if (transacoesRes.error) throw new Error(`Transações: ${transacoesRes.error.message}`);
@@ -142,17 +197,12 @@ export default function MainLayout({ session }: { session?: Session }) {
         if (gruposRes.error) throw new Error(`Grupos: ${gruposRes.error.message}`);
         if (contasRes.error) throw new Error(`Contas: ${contasRes.error.message}`);
         if (categoriasRes.error) throw new Error(`Categorias: ${categoriasRes.error.message}`);
-        if (periodosRes.error) throw new Error(`Períodos: ${periodosRes.error.message}`);
 
         setTransacoes(transacoesRes.data || []);
         setMembros(membrosRes.data || []);
         setGrupos(gruposRes.data || []);
         setContas(contasRes.data || []);
         setCategorias(categoriasRes.data || []);
-        setPeriodos(periodosRes.data || []);
-
-        const active = periodosRes.data?.find(p => p.ativo) || null;
-        setActivePeriodo(active);
 
       } catch (err: any) {
         console.error("Erro ao carregar dados:", err);
@@ -170,11 +220,11 @@ export default function MainLayout({ session }: { session?: Session }) {
     fetchInitialData();
   }, [session?.user?.id]);
 
-  // Transações filtradas pelo período ativo
+  // Transações filtradas pelo período selecionado
   const transacoesFiltradas = useMemo(() => {
-    if (!activePeriodo) return transacoes;
-    return transacoes.filter(t => t.periodo_financeiro_id === activePeriodo.id);
-  }, [transacoes, activePeriodo]);
+    if (!periodoSelecionado) return transacoes;
+    return transacoes.filter(t => t.periodo_financeiro_id === periodoSelecionado.id);
+  }, [transacoes, periodoSelecionado]);
 
   const { totalReceitas, totalDespesas, saldo } = useMemo(() => {
     const totalReceitas = transacoesFiltradas
@@ -397,29 +447,37 @@ export default function MainLayout({ session }: { session?: Session }) {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs and Period Selector */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex space-x-4 border-b border-gray-700">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`py-2 px-4 font-medium text-sm transition-colors focus:outline-none border-b-2 ${
-              activeTab === 'dashboard'
-                ? 'border-brand-primary text-brand-primary'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab('transacoes')}
-            className={`py-2 px-4 font-medium text-sm transition-colors focus:outline-none border-b-2 ${
-              activeTab === 'transacoes'
-                ? 'border-brand-primary text-brand-primary'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            Transações
-          </button>
+        <div className="flex flex-col sm:flex-row justify-between items-end border-b border-gray-700">
+          <div className="flex space-x-4 w-full sm:w-auto">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`py-2 px-4 font-medium text-sm transition-colors focus:outline-none border-b-2 ${
+                activeTab === 'dashboard'
+                  ? 'border-brand-primary text-brand-primary'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('transacoes')}
+              className={`py-2 px-4 font-medium text-sm transition-colors focus:outline-none border-b-2 ${
+                activeTab === 'transacoes'
+                  ? 'border-brand-primary text-brand-primary'
+                  : 'border-transparent text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Transações
+            </button>
+          </div>
+          <PeriodoSelector 
+            periodos={periodos}
+            periodoSelecionado={periodoSelecionado}
+            onPeriodoChange={setPeriodoSelecionado}
+            loading={loadingPeriodos}
+          />
         </div>
       </div>
 
@@ -448,7 +506,7 @@ export default function MainLayout({ session }: { session?: Session }) {
                         onDelete={handleRequestDelete}
                         session={session}
                         categorias={categorias}
-                        activePeriodo={activePeriodo}
+                        activePeriodo={periodoSelecionado}
                     />
                   </>
                 )}
@@ -461,6 +519,8 @@ export default function MainLayout({ session }: { session?: Session }) {
                     formatarMoeda={formatarMoeda}
                     onEdit={handleStartEdit}
                     onDelete={handleRequestDelete}
+                    // Passamos apenas o selecionado para filtro local
+                    periodoSelecionado={periodoSelecionado}
                 />
                 )}
             </>
@@ -493,7 +553,7 @@ export default function MainLayout({ session }: { session?: Session }) {
         grupos={grupos}
         contas={contas}
         categorias={categorias}
-        activePeriodoId={activePeriodo?.id}
+        activePeriodoId={periodoSelecionado?.id}
       />
       
       <ConfirmationModal

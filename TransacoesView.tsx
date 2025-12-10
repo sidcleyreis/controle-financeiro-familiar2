@@ -1,5 +1,5 @@
-import React from 'react';
-import type { Transacao } from './types';
+import React, { useMemo } from 'react';
+import type { Transacao, PeriodoFinanceiro } from './types';
 
 interface TransacoesViewProps {
   transacoes: Transacao[];
@@ -8,6 +8,8 @@ interface TransacoesViewProps {
   formatarMoeda: (value: number) => string;
   onEdit: (transacao: Transacao) => void;
   onDelete: (id: number) => void;
+  // Mantemos apenas o periodoSelecionado para filtro local, removemos os controles do seletor
+  periodoSelecionado: PeriodoFinanceiro | null;
 }
 
 const PencilIcon = () => (
@@ -47,15 +49,12 @@ const getTransacaoStyle = (t: Transacao) => {
     
     // Lógica para Transferência
     if (t.tipo === 'transferencia') {
-        // Identifica se é saída (Envio) ou entrada (Recebido) baseado na descrição gerada
-        // "Envio p/..." -> Saída (Vermelho)
-        // "Recebido de..." -> Entrada (Verde)
         const isSaida = t.descricao?.startsWith('Envio');
         
         return { 
             color: isSaida ? 'text-brand-secondary' : 'text-brand-primary', 
             sinal: isSaida ? '- ' : '+ ',
-            iconColor: 'text-blue-400', // Ícone sempre azul para diferenciar o TIPO
+            iconColor: 'text-blue-400',
             Icon: ExchangeIcon
         }; 
     }
@@ -63,7 +62,21 @@ const getTransacaoStyle = (t: Transacao) => {
     return { color: 'text-gray-100', sinal: '', iconColor: 'text-gray-400', Icon: ExchangeIcon };
 };
 
-export default function TransacoesView({ transacoes, loading, error, formatarMoeda, onEdit, onDelete }: TransacoesViewProps) {
+export default function TransacoesView({ 
+    transacoes, 
+    loading, 
+    error, 
+    formatarMoeda, 
+    onEdit, 
+    onDelete,
+    periodoSelecionado,
+}: TransacoesViewProps) {
+
+  const filteredTransacoes = useMemo(() => {
+    if (!periodoSelecionado) return transacoes;
+    return transacoes.filter(t => t.periodo_financeiro_id === periodoSelecionado.id);
+  }, [transacoes, periodoSelecionado]);
+
   return (
     <div style={{ animation: 'fadeIn 0.5s ease-in-out' }}>
       <style>{`
@@ -75,15 +88,23 @@ export default function TransacoesView({ transacoes, loading, error, formatarMoe
       
       {/* Histórico de Transações */}
       <div className="bg-gray-700 p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-bold mb-4">Histórico de Transações</h2>
+        
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <h2 className="text-xl font-bold">Histórico de Transações</h2>
+        </div>
+
         {error && <p className="mb-4 text-center text-sm text-brand-secondary">{error}</p>}
         {loading ? (
           <p className="text-center text-gray-400 py-8">Carregando transações...</p>
-        ) : transacoes.length === 0 ? (
-          <p className="text-center text-gray-400 py-8">Nenhuma transação registrada ainda. Clique no botão '+' no canto superior direito para adicionar uma.</p>
+        ) : filteredTransacoes.length === 0 ? (
+          <p className="text-center text-gray-400 py-8">
+            {periodoSelecionado 
+                ? "Nenhuma transação neste período. Selecione outro período ou adicione uma transação." 
+                : "Nenhuma transação registrada ainda."}
+          </p>
         ) : (
           <ul className="divide-y divide-gray-600">
-            {transacoes.map((t) => {
+            {filteredTransacoes.map((t) => {
                 const style = getTransacaoStyle(t);
                 const IconComponent = style.Icon;
                 

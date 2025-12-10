@@ -47,7 +47,7 @@ const ArrowDownIcon = () => (
   </svg>
 );
 
-// Função auxiliar para determinar cor e sinal (Replicada de TransacoesView para consistência)
+// Função auxiliar para determinar cor e sinal
 const getTransacaoStyle = (t: Transacao) => {
     if (t.tipo === 'receita') return { color: 'text-brand-primary', sinal: '+ ', iconColor: 'text-brand-primary', Icon: ArrowUpIcon };
     if (t.tipo === 'despesa') return { color: 'text-brand-secondary', sinal: '- ', iconColor: 'text-brand-secondary', Icon: ArrowDownIcon };
@@ -76,7 +76,7 @@ export default function DashboardView({
   onDelete,
   session,
   categorias,
-  activePeriodo
+  activePeriodo,
 }: DashboardViewProps) {
   
   // Dados para o gráfico de Receitas x Despesas
